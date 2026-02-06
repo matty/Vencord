@@ -19,17 +19,30 @@
 import "./styles.css";
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Devs } from "@utils/constants";
+import { copyWithToast } from "@utils/discord";
 import definePlugin from "@utils/types";
-import { Message } from "@vencord/discord-types";
-import { ChannelStore, Menu } from "@webpack/common";
+import { Channel, Message } from "@vencord/discord-types";
+import { ChannelStore, Menu, MessageStore, showToast, Toasts } from "@webpack/common";
+
+
+
 
 import { settings } from "./settings";
+import { getSelectionChannelId, isInSelectionMode, isMessageSelected, SelectionActionBar, toggleMessageSelection } from "./selectionMode";
 import { setShouldShowTranslateEnabledTooltip, TranslateChatBarIcon, TranslateIcon } from "./TranslateIcon";
-import { handleTranslate, TranslationAccessory } from "./TranslationAccessory";
-import { translate } from "./utils";
+
+
+
+import { handleTranslate, handleTranslateError, MessageSelectionIndicator, startTranslating, TranslationAccessory } from "./TranslationAccessory";
+import { endProgress, startProgress, TranslationProgressBar } from "./progressBar";
+import { TranslationStore } from "./translationStore";
+import { cl, translate } from "./utils";
+
 
 const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }: { message: Message; }) => {
+
     const content = getMessageContent(message);
     if (!content) return;
 
@@ -42,11 +55,79 @@ const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }: { m
             label="Translate"
             icon={TranslateIcon}
             action={async () => {
-                const trans = await translate("received", content);
-                handleTranslate(message.id, trans);
+                startProgress(1);
+                startTranslating(message.id);
+                try {
+                    const trans = await translate("received", content);
+                    handleTranslate(message.id, trans);
+                    TranslationStore.save(message.id, trans, settings.store.service === "openrouter" ? settings.store.openrouterModel : undefined);
+                } catch (e) {
+                    handleTranslateError(message.id, e instanceof Error ? e.message : "Translation failed");
+                } finally {
+                    endProgress();
+                }
             }}
         />
     ));
+};
+
+// Store translated channel names: channelId -> { original, translated }
+const channelTranslations = new Map<string, { original: string; translated: string; }>();
+
+const channelCtxPatch: NavContextMenuPatchCallback = (children, { channel }: { channel: Channel; }) => {
+    if (!channel?.name) return;
+
+    const isTranslated = channelTranslations.has(channel.id);
+
+    if (isTranslated) {
+        // Option to remove translation
+        children.push(
+            <Menu.MenuItem
+                id="vc-trans-channel-remove"
+                label="Remove Channel Translation"
+                icon={TranslateIcon}
+                action={() => {
+                    const cached = channelTranslations.get(channel.id);
+                    if (cached) {
+                        (channel as any).name = cached.original;
+                        channelTranslations.delete(channel.id);
+                        showToast("Translation removed", Toasts.Type.SUCCESS);
+                    }
+                }}
+            />
+        );
+    } else {
+        // Option to translate
+        children.push(
+            <Menu.MenuItem
+                id="vc-trans-channel"
+                label="Translate"
+                icon={TranslateIcon}
+                action={async () => {
+                    startProgress(1);
+                    showToast("Translating...", Toasts.Type.MESSAGE);
+                    try {
+                        const originalName = channel.name;
+                        const trans = await translate("received", originalName);
+
+                        // Store translation and modify channel name
+                        channelTranslations.set(channel.id, {
+                            original: originalName,
+                            translated: trans.text
+                        });
+
+                        // Modify the channel name client-side
+                        (channel as any).name = `${originalName} [${trans.text}]`;
+                        showToast(`Translated: ${trans.text}`, Toasts.Type.SUCCESS);
+                    } catch (e) {
+                        showToast(e instanceof Error ? e.message : "Translation failed", Toasts.Type.FAILURE);
+                    } finally {
+                        endProgress();
+                    }
+                }}
+            />
+        );
+    }
 };
 
 
@@ -63,16 +144,30 @@ let tooltipTimeout: any;
 
 export default definePlugin({
     name: "Translate",
-    description: "Translate messages with Google Translate or DeepL",
+    description: "Translate messages with Google Translate, DeepL, or OpenRouter (LLM)",
     authors: [Devs.Ven, Devs.AshtonMemer],
     settings,
+    start: () => TranslationStore.load(),
+
+
     contextMenus: {
-        "message": messageCtxPatch
+        "message": messageCtxPatch,
+        "channel-context": channelCtxPatch,
+        "thread-context": channelCtxPatch
     },
     // not used, just here in case some other plugin wants it or w/e
     translate,
 
-    renderMessageAccessory: props => <TranslationAccessory message={props.message} />,
+
+    renderMessageAccessory: props => (
+        <>
+            <MessageSelectionIndicator messageId={props.message.id} />
+            <TranslationAccessory message={props.message} />
+            <SelectionActionBar />
+            <TranslationProgressBar />
+        </>
+    ),
+
 
     chatBarButton: {
         icon: TranslateIcon,
@@ -85,28 +180,49 @@ export default definePlugin({
             const content = getMessageContent(message);
             if (!content) return null;
 
+            const inSelectionMode = isInSelectionMode();
+            const currentSelectionChannel = getSelectionChannelId();
+            const inSelectionModeForChannel = inSelectionMode && (currentSelectionChannel === null || currentSelectionChannel === message.channel_id);
+            const isSelected = inSelectionModeForChannel && isMessageSelected(message.id);
+
             return {
-                label: "Translate",
+                label: inSelectionModeForChannel
+                    ? (isSelected ? "Deselect" : "Select")
+                    : "Translate",
                 icon: TranslateIcon,
                 message,
                 channel: ChannelStore.getChannel(message.channel_id),
-                onClick: async () => {
-                    const trans = await translate("received", content);
-                    handleTranslate(message.id, trans);
-                }
+                onClick: inSelectionModeForChannel
+                    ? () => toggleMessageSelection(message.id, message.channel_id)
+                    : async () => {
+                        startProgress(1);
+                        startTranslating(message.id);
+                        try {
+                            const trans = await translate("received", content);
+                            handleTranslate(message.id, trans);
+                            TranslationStore.save(message.id, trans, settings.store.service === "openrouter" ? settings.store.openrouterModel : undefined);
+                        } catch (e) {
+                            handleTranslateError(message.id, e instanceof Error ? e.message : "Translation failed");
+                        } finally {
+                            endProgress();
+                        }
+                    }
             };
         }
     },
 
-    async onBeforeMessageSend(_, message) {
+
+
+
+    async onBeforeMessageSend(_, messageObj) {
         if (!settings.store.autoTranslate) return;
-        if (!message.content) return;
+        if (!messageObj.content) return;
 
         setShouldShowTranslateEnabledTooltip?.(true);
         clearTimeout(tooltipTimeout);
         tooltipTimeout = setTimeout(() => setShouldShowTranslateEnabledTooltip?.(false), 2000);
 
-        const trans = await translate("sent", message.content);
-        message.content = trans.text;
+        const trans = await translate("sent", messageObj.content);
+        messageObj.content = trans.text;
     }
 });

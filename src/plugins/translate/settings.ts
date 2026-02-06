@@ -19,6 +19,17 @@
 import { definePluginSettings } from "@api/Settings";
 import { OptionType } from "@utils/types";
 
+export interface SavedTranslation {
+    text: string;
+    sourceLanguage: string;
+    model?: string;
+    timestamp: number;
+}
+
+const DEFAULT_LLM_PROMPT = `Translate to {{targetLanguage}}. Return ONLY the translated text. Preserve formatting, emojis, and markdown. Prioritize natural-sounding output over literal translation.
+
+{{message}}`;
+
 export const settings = definePluginSettings({
     receivedInput: {
         type: OptionType.STRING,
@@ -52,7 +63,8 @@ export const settings = definePluginSettings({
         options: [
             { label: "Google Translate", value: "google", default: true },
             { label: "DeepL Free", value: "deepl" },
-            { label: "DeepL Pro", value: "deepl-pro" }
+            { label: "DeepL Pro", value: "deepl-pro" },
+            { label: "OpenRouter (LLM)", value: "openrouter" }
         ] as const,
         onChange: resetLanguageDefaults
     },
@@ -62,6 +74,25 @@ export const settings = definePluginSettings({
         default: "",
         placeholder: "Get your API key from https://deepl.com/your-account",
         disabled: () => IS_WEB
+    },
+    openrouterApiKey: {
+        type: OptionType.STRING,
+        description: "OpenRouter API key",
+        default: "",
+        placeholder: "Get your API key from https://openrouter.ai/keys",
+        disabled: () => IS_WEB
+    },
+    openrouterModel: {
+        type: OptionType.STRING,
+        description: "OpenRouter model to use for translations",
+        default: "z-ai/glm-4.5-air:free",
+        hidden: true
+    },
+    openrouterPrompt: {
+        type: OptionType.STRING,
+        description: "Custom prompt template for LLM translations. Use {{targetLanguage}} and {{message}} as placeholders.",
+        default: DEFAULT_LLM_PROMPT,
+        hidden: true
     },
     autoTranslate: {
         type: OptionType.BOOLEAN,
@@ -75,6 +106,7 @@ export const settings = definePluginSettings({
     },
 }).withPrivateSettings<{
     showAutoTranslateAlert: boolean;
+    openrouterModelsCache: Array<{ id: string; name: string; }>;
 }>();
 
 export function resetLanguageDefaults() {

@@ -2,14 +2,103 @@
     padding: 1em;
 }
 
+/* Translation Progress Bar */
+.vc-trans-progress-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 9999;
+    background: transparent;
+    pointer-events: none;
+}
+
+.vc-trans-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--brand-500), var(--brand-360), var(--brand-500));
+    background-size: 200% 100%;
+    transition: width 0.3s ease;
+    width: 100%;
+}
+
+.vc-trans-progress-bar-pulse {
+    animation: vc-trans-progress-pulse 1.5s ease-in-out infinite, vc-trans-progress-shimmer 2s linear infinite;
+}
+
+@keyframes vc-trans-progress-pulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes vc-trans-progress-shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.vc-trans-progress-text {
+    position: fixed;
+    top: 6px;
+    right: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--background-mod-faint);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    z-index: 9999;
+}
+
+/* Modal Layout */
 .vc-trans-modal-header {
     place-content: center space-between;
 }
 
 .vc-trans-modal-title {
     margin: 0;
+    flex-grow: 1;
 }
 
+/* Tab Bar - following serverInfo pattern */
+.vc-trans-tab-bar {
+    border-bottom: 1px solid var(--border-subtle);
+    margin: 0;
+    padding: 0 16px;
+    display: flex;
+    gap: 24px;
+}
+
+.vc-trans-tab {
+    padding: 12px 0;
+    border-bottom: 2px solid transparent;
+    color: var(--interactive-icon-default);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    user-select: none;
+}
+
+.vc-trans-tab:hover {
+    color: var(--interactive-icon-hover);
+}
+
+.vc-trans-tab-active {
+    color: var(--interactive-icon-active);
+    border-bottom-color: var(--interactive-icon-active);
+}
+
+/* Translation Accessory */
 .vc-trans-accessory {
     color: var(--text-muted);
     margin-top: 0.5em;
@@ -39,4 +128,182 @@
 
 .vc-trans-chat-button {
     scale: 1.085;
+}
+
+/* Translation History UI - Settings Tab */
+.vc-trans-settings-tab {
+    padding: 16px;
+}
+
+/* Translation History UI - History Tab */
+.vc-trans-history-tab {
+    display: flex;
+    flex-direction: column;
+    height: 400px;
+    padding: 16px;
+}
+
+.vc-trans-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.vc-trans-history-search {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--input-border-default, var(--border-muted));
+    border-radius: var(--radius-sm);
+    background: var(--input-background-default);
+    color: var(--text-default);
+    font-size: 14px;
+}
+
+.vc-trans-history-search:focus {
+    outline: none;
+    border-color: var(--brand-500);
+}
+
+.vc-trans-history-search::placeholder {
+    color: var(--text-muted);
+}
+
+.vc-trans-history-scroller {
+    flex: 1;
+    padding-right: 8px;
+}
+
+.vc-trans-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.vc-trans-history-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.vc-trans-history-row:hover {
+    background-color: var(--background-mod-subtle);
+}
+
+.vc-trans-history-row-expanded {
+    background-color: var(--background-mod-strong);
+}
+
+.vc-trans-history-row-content {
+    flex: 1;
+    min-width: 0;
+    margin-right: 12px;
+}
+
+.vc-trans-history-row-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.vc-trans-history-row-expand {
+    color: var(--text-muted);
+    font-size: 10px;
+    user-select: none;
+}
+
+.vc-trans-history-row-meta {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.vc-trans-history-row-text {
+    color: var(--text-default);
+    font-size: 14px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.vc-trans-history-row-text-truncated {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vc-trans-history-row-delete {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--interactive-icon-default);
+}
+
+.vc-trans-history-row-delete:hover {
+    color: var(--status-danger);
+}
+
+.vc-trans-history-empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 24px;
+}
+
+/* Selection Mode - following spotifyControls/vencordToolbox patterns */
+.vc-trans-selection-bar {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 24px;
+    background: var(--background-base-low);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    z-index: 1000;
+}
+
+.vc-trans-selection-bar-count {
+    color: var(--text-default);
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.vc-trans-selection-bar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Header bar toggle button - following vencordToolbox exactly */
+.vc-trans-header-toggle,
+.vc-trans-header-icon {
+    -webkit-app-region: no-drag;
+}
+
+.vc-trans-header-icon {
+    color: var(--interactive-icon-default);
+}
+
+.vc-trans-header-toggle[class*="selected"] .vc-trans-header-icon {
+    color: var(--interactive-icon-active);
+}
+
+.vc-trans-header-toggle:hover .vc-trans-header-icon {
+    color: var(--interactive-icon-hover);
+}
+
+/* Active state for header icon */
+.vc-trans-header-icon-active {
+    color: var(--brand-500);
+}
+
+/* Selected message highlight - use CSS variable with fallback */
+[data-vc-trans-selected="true"] {
+    background: var(--brand-10, color-mix(in srgb, var(--brand-500) 10%, transparent)) !important;
+    border-left: 3px solid var(--brand-500) !important;
 }

@@ -22,6 +22,7 @@ import { PluginNative } from "@utils/types";
 import { showToast, Toasts } from "@webpack/common";
 
 import { DeeplLanguages, deeplLanguageToGoogleLanguage, GoogleLanguages } from "./languages";
+import { translateWithLLM } from "./openrouter";
 import { resetLanguageDefaults, settings } from "./settings";
 
 export const cl = classNameFactory("vc-trans-");
@@ -45,17 +46,33 @@ export interface TranslationValue {
     text: string;
 }
 
-export const getLanguages = () => IS_WEB || settings.store.service === "google"
-    ? GoogleLanguages
-    : DeeplLanguages;
+export const getLanguages = () => {
+    if (IS_WEB || settings.store.service === "google") {
+        return GoogleLanguages;
+    }
+    if (settings.store.service === "openrouter") {
+        // OpenRouter uses Google language codes for display in the selector
+        return GoogleLanguages;
+    }
+    return DeeplLanguages;
+};
 
 export async function translate(kind: "received" | "sent", text: string): Promise<TranslationValue> {
-    const translate = IS_WEB || settings.store.service === "google"
-        ? googleTranslate
-        : deeplTranslate;
-
     try {
-        return await translate(
+        // OpenRouter (LLM) translation
+        if (!IS_WEB && settings.store.service === "openrouter") {
+            const targetLang = settings.store[`${kind}Output`];
+            // Get human-readable language name
+            const targetLangName = GoogleLanguages[targetLang] ?? targetLang;
+            return await translateWithLLM(text, targetLangName);
+        }
+
+        // Traditional translation services
+        const translateFn = IS_WEB || settings.store.service === "google"
+            ? googleTranslate
+            : deeplTranslate;
+
+        return await translateFn(
             text,
             settings.store[`${kind}Input`],
             settings.store[`${kind}Output`]
@@ -63,7 +80,9 @@ export async function translate(kind: "received" | "sent", text: string): Promis
     } catch (e) {
         const userMessage = typeof e === "string"
             ? e
-            : "Something went wrong. If this issue persists, please check the console or ask for help in the support server.";
+            : e instanceof Error
+                ? e.message
+                : "Something went wrong. If this issue persists, please check the console or ask for help in the support server.";
 
         showToast(userMessage, Toasts.Type.FAILURE);
 
@@ -153,3 +172,20 @@ async function deeplTranslate(text: string, sourceLang: string, targetLang: stri
         text: translations[0].text
     };
 }
+
+/**
+ * Translates multiple texts at once.
+ * Only supports OpenRouter (LLM) for actual batching; fallbacks to sequential for others.
+ */
+export async function translateBatch(kind: "received" | "sent", texts: string[]): Promise<TranslationValue[]> {
+    if (!IS_WEB && settings.store.service === "openrouter") {
+        const targetLang = settings.store[`${kind}Output`];
+        const targetLangName = GoogleLanguages[targetLang] ?? targetLang;
+        const { translateBatchWithLLM } = await import("./openrouter");
+        return await translateBatchWithLLM(texts, targetLangName);
+    }
+
+    // Fallback to sequential for other services
+    return Promise.all(texts.map(text => translate(kind, text)));
+}
+

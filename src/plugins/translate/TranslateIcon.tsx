@@ -14,15 +14,17 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
+ */
 
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
 import { classes } from "@utils/misc";
 import { openModal } from "@utils/modal";
 import { IconComponent } from "@utils/types";
-import { Alerts, Forms, Tooltip, useEffect, useState } from "@webpack/common";
+import { Paragraph } from "@components/Paragraph";
+import { Alerts, Menu, Popout, Tooltip, useEffect, useRef, useState } from "@webpack/common";
 
 import { settings } from "./settings";
+import { toggleSelectionMode, useSelectionState } from "./selectionMode";
 import { TranslateModal } from "./TranslateModal";
 import { cl } from "./utils";
 
@@ -39,10 +41,88 @@ export const TranslateIcon: IconComponent = ({ height = 20, width = 20, classNam
     );
 };
 
+// Selection mode checkbox icon
+function SelectionIcon({ isActive }: { isActive: boolean; }) {
+    return (
+        <svg viewBox="0 0 24 24" width={18} height={18}>
+            <path fill="currentColor" d={isActive
+                ? "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+                : "M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"
+            } />
+        </svg>
+    );
+}
+
+// Popout menu content
+function TranslatePopoutMenu({ onClose }: { onClose: () => void; }) {
+    const { autoTranslate } = settings.use(["autoTranslate"]);
+    const { isSelectionMode } = useSelectionState();
+
+    return (
+        <Menu.Menu
+            navId="vc-translate-menu"
+            onClose={onClose}
+        >
+            <Menu.MenuItem
+                id="vc-trans-open-settings"
+                label="Open Settings"
+                icon={TranslateIcon}
+                action={() => {
+                    onClose();
+                    openModal(props => (
+                        <TranslateModal rootProps={props} />
+                    ));
+                }}
+            />
+
+            <Menu.MenuSeparator />
+
+            <Menu.MenuCheckboxItem
+                id="vc-trans-selection-mode"
+                label="Multi-Select Mode"
+                checked={isSelectionMode}
+                action={() => {
+                    toggleSelectionMode();
+                    onClose();
+                }}
+            />
+
+            <Menu.MenuCheckboxItem
+                id="vc-trans-auto-translate"
+                label="Auto Translate"
+                checked={autoTranslate}
+                action={() => {
+                    const newState = !autoTranslate;
+                    settings.store.autoTranslate = newState;
+                    if (newState && settings.store.showAutoTranslateAlert !== false) {
+                        Alerts.show({
+                            title: "Vencord Auto-Translate Enabled",
+                            body: <>
+                                <Paragraph>
+                                    You just enabled Auto Translate! Any message <b>will automatically be translated</b> before being sent.
+                                </Paragraph>
+                            </>,
+                            confirmText: "Disable Auto-Translate",
+                            cancelText: "Got it",
+                            secondaryConfirmText: "Don't show again",
+                            onConfirmSecondary: () => settings.store.showAutoTranslateAlert = false,
+                            onConfirm: () => settings.store.autoTranslate = false,
+                            confirmColor: "vc-notification-log-danger-btn",
+                        });
+                    }
+                }}
+            />
+        </Menu.Menu>
+    );
+}
+
 export let setShouldShowTranslateEnabledTooltip: undefined | ((show: boolean) => void);
 
 export const TranslateChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
     const { autoTranslate } = settings.use(["autoTranslate"]);
+    const { isSelectionMode } = useSelectionState();
+    const buttonRef = useRef(null);
+    const [showPopout, setShowPopout] = useState(false);
 
     const [shouldShowTranslateEnabledTooltip, setter] = useState(false);
     useEffect(() => {
@@ -52,45 +132,32 @@ export const TranslateChatBarIcon: ChatBarButtonFactory = ({ isMainChat }) => {
 
     if (!isMainChat) return null;
 
-    const toggle = () => {
-        const newState = !autoTranslate;
-        settings.store.autoTranslate = newState;
-        if (newState && settings.store.showAutoTranslateAlert !== false)
-            Alerts.show({
-                title: "Vencord Auto-Translate Enabled",
-                body: <>
-                    <Forms.FormText>
-                        You just enabled Auto Translate! Any message <b>will automatically be translated</b> before being sent.
-                    </Forms.FormText>
-                </>,
-                confirmText: "Disable Auto-Translate",
-                cancelText: "Got it",
-                secondaryConfirmText: "Don't show again",
-                onConfirmSecondary: () => settings.store.showAutoTranslateAlert = false,
-                onConfirm: () => settings.store.autoTranslate = false,
-                // troll
-                confirmColor: "vc-notification-log-danger-btn",
-            });
-    };
-
     const button = (
-        <ChatBarButton
-            tooltip="Open Translate Modal"
-            onClick={e => {
-                if (e.shiftKey) return toggle();
-
-                openModal(props => (
-                    <TranslateModal rootProps={props} />
-                ));
-            }}
-            onContextMenu={toggle}
-            buttonProps={{
-                "aria-haspopup": "dialog"
-            }}
+        <Popout
+            position="top"
+            align="right"
+            animation={Popout.Animation.NONE}
+            shouldShow={showPopout}
+            onRequestClose={() => setShowPopout(false)}
+            targetElementRef={buttonRef}
+            renderPopout={() => <TranslatePopoutMenu onClose={() => setShowPopout(false)} />}
         >
-            <TranslateIcon className={cl({ "auto-translate": autoTranslate, "chat-button": true })} />
-        </ChatBarButton>
+            {(_, { isShown }) => (
+                <div ref={buttonRef}>
+                    <ChatBarButton
+                        tooltip={isShown ? "" : (isSelectionMode ? "Selection Mode Active" : "Translate")}
+                        onClick={() => setShowPopout(v => !v)}
+                        buttonProps={{
+                            "aria-haspopup": "dialog"
+                        }}
+                    >
+                        <TranslateIcon className={cl({ "auto-translate": autoTranslate, "selection-active": isSelectionMode, "chat-button": true })} />
+                    </ChatBarButton>
+                </div>
+            )}
+        </Popout>
     );
+
 
     if (shouldShowTranslateEnabledTooltip && settings.store.showAutoTranslateTooltip)
         return (
