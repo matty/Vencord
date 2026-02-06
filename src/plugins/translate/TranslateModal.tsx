@@ -68,8 +68,8 @@ function LanguageSelect({ settingsKey, includeAuto }: { settingsKey: LanguageSet
 
             <SearchableSelect
                 options={options}
-                value={currentOption}
-                placeholder={"Select a language"}
+                value={options.find(o => o.value === currentValue)?.value}
+                placeholder="Select a language"
                 maxVisibleItems={5}
                 closeOnSelect={true}
                 onChange={v => settings.store[settingsKey] = v as string}
